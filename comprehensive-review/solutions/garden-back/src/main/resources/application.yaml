@@ -1,0 +1,55 @@
+quarkus:
+  http:
+    port: 8081
+    cors: true
+  kafka:
+    devservices:
+      enabled: false
+    health:
+      enabled: true
+
+mp:
+  messaging:
+    incoming:
+      garden-low-temperature-events:
+        connector: smallrye-kafka
+        topic: garden-low-temperature-events
+        value:
+          deserializer: com.redhat.training.gardens.serde.LowTemperatureDetectedDeserializer
+      garden-low-humidity-events:
+        connector: smallrye-kafka
+        topic: garden-low-humidity-events
+        value:
+          deserializer: com.redhat.training.gardens.serde.LowHumidityDetectedDeserializer
+      garden-strong-wind-events:
+        connector: smallrye-kafka
+        topic: garden-strong-wind-events
+        value:
+          deserializer: com.redhat.training.gardens.serde.StrongWindDetectedDeserializer
+      garden-status-events:
+        connector: smallrye-kafka
+        topic: garden-status-events
+        value:
+          deserializer: com.redhat.training.gardens.serde.GardenStatusDeserializer
+      garden-sensor-measurements-enriched:
+        connector: smallrye-kafka
+        topic: garden-sensor-measurements-enriched
+        value:
+          deserializer: com.redhat.training.gardens.serde.SensorMeasurementEnrichedDeserializer
+      garden-sensor-measurements-raw:
+        connector: smallrye-kafka
+        topic: garden-sensor-measurements
+        enable:
+          auto:
+            commit: false
+        auto:
+          offset:
+            reset: earliest
+        apicurio:
+          registry:
+            use-specific-avro-reader: true
+    connector:
+      smallrye-kafka:
+        apicurio:
+          registry:
+            url: http://YOUR_SERVICE_REGISTRY_URL/apis/registry/v2

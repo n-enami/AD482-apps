@@ -1,0 +1,31 @@
+quarkus:
+  kafka:
+    devservices:
+      enabled: false
+
+mp:
+  messaging:
+    connector:
+      smallrye-kafka:
+        apicurio:
+          registry:
+            url: http://YOUR_SERVICE_REGISTRY_URL/apis/registry/v2
+    outgoing:
+      garden-sensor-measurements-out:
+        apicurio:
+          registry:
+            auto-register: true
+        connector: smallrye-kafka
+        topic: garden-sensor-measurements
+      garden-sensor-measurements-repl:
+        connector: smallrye-kafka
+        value:
+          serializer: io.quarkus.kafka.client.serialization.ObjectMapperSerializer
+        topic: garden-sensor-measurements-repl
+    incoming:
+      garden-sensor-measurements-in:
+        apicurio:
+          registry:
+            auto-register: true
+        connector: smallrye-kafka
+        topic: garden-sensor-measurements

@@ -33,6 +33,7 @@ import org.apache.kafka.streams.state.KeyValueStore;
 
 import io.quarkus.kafka.client.serialization.ObjectMapperSerde;
 
+import com.redhat.training.gardens.serde.SerdeFactory;
 @ApplicationScoped
 public class GardenStreamsTopology {
     public static final String SENSORS_TOPIC = "garden-sensors";
@@ -47,41 +48,68 @@ public class GardenStreamsTopology {
     private static final double LOW_HUMIDITY_THRESHOLD_PERCENT = 0.2;
     private static final double STRONG_WIND_THRESHOLD_MS = 10;
 
-    private final ObjectMapperSerde<SensorMeasurementEnriched> sensorMeasurementEnrichedSerde = new ObjectMapperSerde<>(SensorMeasurementEnriched.class);
-    private final ObjectMapperSerde<LowTemperatureDetected> lowTemperatureEventSerde = new ObjectMapperSerde<>(LowTemperatureDetected.class);
-    private final ObjectMapperSerde<LowHumidityDetected> lowHumidityEventSerde = new ObjectMapperSerde<>(LowHumidityDetected.class);
-    private final ObjectMapperSerde<StrongWindDetected> strongWindEventSerde = new ObjectMapperSerde<>(StrongWindDetected.class);
-    private final ObjectMapperSerde<GardenStatus> gardenStatusSerde = new ObjectMapperSerde<>(GardenStatus.class);
+    // private final ObjectMapperSerde<SensorMeasurementEnriched> sensorMeasurementEnrichedSerde = new ObjectMapperSerde<>(SensorMeasurementEnriched.class);
+    // private final ObjectMapperSerde<LowTemperatureDetected> lowTemperatureEventSerde = new ObjectMapperSerde<>(LowTemperatureDetected.class);
+    // private final ObjectMapperSerde<LowHumidityDetected> lowHumidityEventSerde = new ObjectMapperSerde<>(LowHumidityDetected.class);
+    // private final ObjectMapperSerde<StrongWindDetected> strongWindEventSerde = new ObjectMapperSerde<>(StrongWindDetected.class);
+    // private final ObjectMapperSerde<GardenStatus> gardenStatusSerde = new ObjectMapperSerde<>(GardenStatus.class);
 
-    private final ObjectMapperSerde<Sensor> sensorSerde = new ObjectMapperSerde<>(Sensor.class);
-    private final ObjectMapperSerde<SensorMeasurement> sensorMeasurementSerde = new ObjectMapperSerde<>(SensorMeasurement.class);
+    // private final ObjectMapperSerde<Sensor> sensorSerde = new ObjectMapperSerde<>(Sensor.class);
+    // private final ObjectMapperSerde<SensorMeasurement> sensorMeasurementSerde = new ObjectMapperSerde<>(SensorMeasurement.class);
+
+    SerdeFactory serdeFactory = SerdeFactory.getInstance();
 
     @Produces
     public Topology build() {
         StreamsBuilder builder = new StreamsBuilder();
 
-        // TODO: Read sensors
+        // // TODO: Read sensors
+        // GlobalKTable<Integer, Sensor> sensors = builder.globalTable(
+        //     SENSORS_TOPIC,
+        //     Consumed.with(Serdes.Integer(), sensorSerde));
+
+        // // TODO: Read sensor measurements
+        // KStream<Integer, SensorMeasurement> sensorMeasurements = builder.stream(
+        //     SENSOR_MEASUREMENTS_TOPIC,
+        //     Consumed.with(Serdes.Integer(), sensorMeasurementSerde));
+
+        // // TODO: Join measurements with sensor table
+        // KStream<Integer, SensorMeasurementEnriched> enrichedSensorMeasurements = sensorMeasurements
+        // .join(
+        //     sensors,
+        //     (sensorId, measurement) -> sensorId,
+        //     (measurement, sensor) -> new SensorMeasurementEnriched(
+        //         measurement, sensor));
+
+        // // TODO: Send enriched measurements to topic
+        // enrichedSensorMeasurements.to(
+        //     ENRICHED_SENSOR_MEASUREMENTS_TOPIC,
+        //     Produced.with(Serdes.Integer(), sensorMeasurementEnrichedSerde));
+
+
         GlobalKTable<Integer, Sensor> sensors = builder.globalTable(
             SENSORS_TOPIC,
-            Consumed.with(Serdes.Integer(), sensorSerde));
+            Consumed.with(Serdes.Integer(), serdeFactory.getSensorSerde())
+        );
 
-        // TODO: Read sensor measurements
         KStream<Integer, SensorMeasurement> sensorMeasurements = builder.stream(
             SENSOR_MEASUREMENTS_TOPIC,
-            Consumed.with(Serdes.Integer(), sensorMeasurementSerde));
+            Consumed.with(Serdes.Integer(), serdeFactory.getSensorMeasurementSerde())
+        );
 
-        // TODO: Join measurements with sensor table
         KStream<Integer, SensorMeasurementEnriched> enrichedSensorMeasurements = sensorMeasurements
-        .join(
-            sensors,
-            (sensorId, measurement) -> sensorId,
-            (measurement, sensor) -> new SensorMeasurementEnriched(
-                measurement, sensor));
+            .join(
+                sensors,
+                (sensorId, measurement) -> sensorId,
+                (measurement, sensor) -> new SensorMeasurementEnriched(
+                    measurement, sensor
+                )
+            );
 
-        // TODO: Send enriched measurements to topic
         enrichedSensorMeasurements.to(
             ENRICHED_SENSOR_MEASUREMENTS_TOPIC,
-            Produced.with(Serdes.Integer(), sensorMeasurementEnrichedSerde));
+            Produced.with(Serdes.Integer(), serdeFactory.getSensorMeasurementEnrichedSerde())
+        );
 
         enrichedSensorMeasurements.print(Printed.toSysOut());
 
@@ -99,7 +127,7 @@ public class GardenStreamsTopology {
         enrichedSensorMeasurements
             .groupBy(
                 (sensorId, measurement) -> measurement.gardenName,
-                Grouped.with(Serdes.String(), sensorMeasurementEnrichedSerde)
+                Grouped.with(Serdes.String(), serdeFactory.getSensorMeasurementEnrichedSerde())
             )
             .windowedBy(
                 TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofMinutes(1))
@@ -113,13 +141,13 @@ public class GardenStreamsTopology {
                             "garden-status-store"
                         )
                         .withKeySerde(Serdes.String())
-                        .withValueSerde(gardenStatusSerde))
+                        .withValueSerde(serdeFactory.getGardenStatusSerde()))
             .toStream()
             .map((windowedGardenName, gardenStatus) -> new KeyValue<Void, GardenStatus>(
                 null, gardenStatus))
             .to(
                 GARDEN_STATUS_EVENTS_TOPIC,
-                Produced.with(Serdes.Void(), gardenStatusSerde));
+                Produced.with(Serdes.Void(), serdeFactory.getGardenStatusSerde()));
 
         return builder.build();
     }
@@ -130,7 +158,7 @@ public class GardenStreamsTopology {
             .filter((sensorId, measurement) -> measurement.value < LOW_TEMPERATURE_THRESHOLD_CELSIUS)
             .mapValues((measurement) -> new LowTemperatureDetected(measurement.gardenName, measurement.sensorId,
                     measurement.value, measurement.timestamp))
-            .to(LOW_TEMPERATURE_EVENTS_TOPIC, Produced.with(Serdes.Integer(), lowTemperatureEventSerde));
+            .to(LOW_TEMPERATURE_EVENTS_TOPIC, Produced.with(Serdes.Integer(), serdeFactory.getLowTemperatureEventSerde()));
     }
 
     // TODO: implement humidity processor
@@ -139,7 +167,7 @@ public class GardenStreamsTopology {
             .filter((sensorId, measurement) -> measurement.value < LOW_HUMIDITY_THRESHOLD_PERCENT)
             .mapValues((measurement) -> new LowHumidityDetected(measurement.gardenName, measurement.sensorId,
                     measurement.value, measurement.timestamp))
-            .to(LOW_HUMIDITY_EVENTS_TOPIC, Produced.with(Serdes.Integer(), lowHumidityEventSerde));
+            .to(LOW_HUMIDITY_EVENTS_TOPIC, Produced.with(Serdes.Integer(), serdeFactory.getLowHumidityEventSerde()));
     }
 
     // TODO: implement wind processor
@@ -148,7 +176,7 @@ public class GardenStreamsTopology {
         .filter((sensorId, measurement) -> measurement.value > STRONG_WIND_THRESHOLD_MS)
             .mapValues((measurement) -> new StrongWindDetected(measurement.gardenName, measurement.sensorId,
                     measurement.value, measurement.timestamp))
-            .to(STRONG_WIND_EVENTS_TOPIC, Produced.with(Serdes.Integer(), strongWindEventSerde));
+            .to(STRONG_WIND_EVENTS_TOPIC, Produced.with(Serdes.Integer(), serdeFactory.getStrongWindEventSerde()));
     }
 
 }

@@ -1,0 +1,20 @@
+quarkus:
+  http:
+    port: 8082
+  kafka:
+    devservices:
+    #   enabled: false
+      enabled: true # modify
+  kafka-streams:
+    bootstrap-servers: localhost:9092   # add
+    application-server: ${hostname}:8080    # add
+    application-id: garden-streams-comprehensive-review
+    topics: garden-sensors,garden-sensor-measurements-repl,garden-sensor-measurements-enriched,garden-low-temperature-events,garden-low-humidity-events,garden-strong-wind-events,garden-status-events
+
+kafka-streams:
+  commit:
+    interval:
+      ms: 1000
+  auto: 
+    offset: 
+      reset: earliest
